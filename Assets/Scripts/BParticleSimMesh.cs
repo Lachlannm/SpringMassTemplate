@@ -1,6 +1,9 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
+using Unity.VisualScripting;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 // Check this out we can require components be on a game object!
 [RequireComponent(typeof(MeshFilter))]
@@ -46,7 +49,7 @@ public class BParticleSimMesh : MonoBehaviour
     public float defaultSpringKS = 100.0f;      // default spring coefficient with default 100
     public float defaultSpringKD = 1.0f;        // default spring daming coefficient with default 1
 
-    public bool debugRender = false;            // To render or not to render
+    public bool debugRender = true;            // To render or not to render
 
 
     /*** 
@@ -63,7 +66,17 @@ public class BParticleSimMesh : MonoBehaviour
      * - the plane (BPlane)
      ***/
 
+    public Transform groundPlane;
+    public bool handlePlaneCollisions;
+    public float mass;
+    public bool useGravity;
+    public Vector3 gravity;
 
+    private List<BParticle> particles = new();
+    private Mesh mesh;
+    private BPlane plane;
+
+    
 
     /// <summary>
     /// Init everything
@@ -81,9 +94,91 @@ public class BParticleSimMesh : MonoBehaviour
     /// </summary>
     void Start()
     {
-
+        InitParticles();
+        InitPlane();
     }
 
+    void InitParticles()
+    {
+        // extract particles from the mesh
+        mesh = GetComponent<MeshFilter>().mesh;
+        var vertices = mesh.vertices.GroupBy(p => p);
+        print(vertices.Count());
+
+        // extract vertices from mesh without duplication
+        foreach (var vertex in vertices)
+        {
+            var v = vertex.FirstOrDefault();
+            var particle = new BParticle();
+            particle.position = transform.TransformPoint(v);
+            particle.velocity = Vector3.zero;
+            particle.mass = mass;
+            particle.contactSpring = new BContactSpring();
+            particle.attachedToContact = false;
+            particle.attachedSprings = new List<BSpring>();
+            particle.currentForces = Vector3.zero;
+            particles.Add(particle);
+            print(particle.position);
+        }
+
+        // set up the springs
+        foreach (var p1 in particles)
+        {
+            foreach (var p2 in particles)
+            {
+                // don't attach a spring between the same particle
+                if (p1.position == p2.position) continue;
+
+                //check if a spring already exists for this connection
+                if (p2.attachedSprings.Exists(s => s.attachedParticle == particles.IndexOf(p1))) continue;
+
+                //add spring
+                var spring = new BSpring();
+                spring.attachedParticle = particles.IndexOf(p2);
+                spring.kd = defaultSpringKD;
+                spring.ks = defaultSpringKS;
+                spring.restLength = (p1.position - p2.position).magnitude;
+                p1.attachedSprings.Add(spring);
+            }
+        }
+    }
+
+    void InitPlane()
+    {
+        plane = new BPlane();
+        plane.normal = groundPlane.transform.rotation * Vector3.up;
+        plane.position = groundPlane.position;
+    }
+    
+    
+    void UpdateMesh()
+    {
+        
+    }
+
+    void SimulationStep()
+    {
+        var delta = Time.deltaTime;
+        for (var i = 0; i < particles.Count();i++)
+        {
+            var p = particles[i];
+            p.position.x += 0.1f;
+            particles[i] = p;
+            
+        }
+        UpdateMesh();
+        ResetParticleForces();
+    }
+    
+    void ResetParticleForces()
+    {
+        for (var i = 0; i < particles.Count();i++)
+        {
+            var p = particles[i];
+            p.currentForces = Vector3.zero;
+            particles[i] = p;
+        }
+    }
 
 
     /*** BIG HINT: My solution code has as least the following functions
@@ -94,6 +189,10 @@ public class BParticleSimMesh : MonoBehaviour
      * ...
      ***/
 
+    void FixedUpdate()
+    {
+        SimulationStep();
+    }
 
 
     /// <summary>
@@ -101,21 +200,20 @@ public class BParticleSimMesh : MonoBehaviour
     /// </summary>
     public void Update()
     {
-        /* This will work if you have a correctly made particles array
+        // This will work if you have a correctly made particles array
         if (debugRender)
         {
-            int particleCount = particles.Length;
+            int particleCount = particles.Count;
             for (int i = 0; i < particleCount; i++)
             {
-                Debug.DrawLine(particles[i].position, particles[i].position + particles[i].currentForces, Color.blue);
+                Debug.DrawLine(particles[i].position, particles[i].position + particles[i].currentForces, Color.blue, 0, true);
 
                 int springCount = particles[i].attachedSprings.Count;
                 for (int j = 0; j < springCount; j++)
                 {
-                    Debug.DrawLine(particles[i].position, particles[particles[i].attachedSprings[j].attachedParticle].position, Color.red);
+                    Debug.DrawLine(particles[i].position, particles[particles[i].attachedSprings[j].attachedParticle].position, Color.red, 0, true);
                 }
             }
         }
-        */
     }
 }
