@@ -26,4 +26,3 @@
 *.spriteatlas			-text merge=unityyamlmerge linguist-generated
 *.terrainlayer			-text merge=unityyamlmerge linguist-generated
 *.unity					-text merge=unityyamlmerge linguist-generated
-. !text !filter !merge !diff
