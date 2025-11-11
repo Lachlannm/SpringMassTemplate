@@ -69,10 +69,10 @@ public class BParticleSimMesh : MonoBehaviour
      ***/
 
     public Transform groundPlane;
-    public bool handlePlaneCollisions;
-    public float mass;
-    public bool useGravity;
-    public Vector3 gravity;
+    public bool handlePlaneCollisions = true;
+    public float mass = 1.0f;
+    public bool useGravity = true;
+    public Vector3 gravity = new Vector3(0f,-9.8f,0f);
 
     private BParticle[] particles;
     private Mesh mesh;
@@ -175,7 +175,7 @@ public class BParticleSimMesh : MonoBehaviour
 
     void SimulationStep()
     {
-        var delta = Time.deltaTime;
+        var delta = Time.fixedDeltaTime;
 
         // calculate new velocity and position
         for (var i = 0; i < particles.Length; i++)
@@ -202,32 +202,38 @@ public class BParticleSimMesh : MonoBehaviour
     void CalculateForces(int index)
     {
         var p = particles[index];
+        
         //gravity
-        p.currentForces += p.mass * gravity;
+        if (useGravity)
+        {
+            p.currentForces += p.mass * gravity;
+        }
 
         //ground
-        if (Vector3.Dot(p.position - plane.position, plane.normal) < 0)
+        if (handlePlaneCollisions)
         {
-            if (!p.attachedToContact)
+            if (Vector3.Dot(p.position - plane.position, plane.normal) < 0)
             {
-                p.attachedToContact = true;
-                var distance = Vector3.Dot(p.position - plane.position, plane.normal);
-                p.contactSpring.attachPoint = p.position - distance * plane.normal;
-                p.contactSpring.restLength = Math.Abs(distance);
+                if (!p.attachedToContact)
+                {
+                    p.attachedToContact = true;
+                    var distance = Vector3.Dot(p.position - plane.position, plane.normal);
+                    p.contactSpring.attachPoint = p.position - distance * plane.normal;
+                }
             }
-        }
-        else
-        {
-            p.attachedToContact = false;
-        }
+            else
+            {
+                p.attachedToContact = false;
+            }
 
-        if (p.attachedToContact)
-        {
-            //spring force
-            var springForce = p.contactSpring.ks * (p.contactSpring.restLength - (p.position - p.contactSpring.attachPoint).magnitude) * (p.position - p.contactSpring.attachPoint) / (p.position - p.contactSpring.attachPoint).magnitude;
-            // damper
-            springForce += -p.contactSpring.kd * Vector3.Dot(p.velocity, (p.position - p.contactSpring.attachPoint) / (p.position - p.contactSpring.attachPoint).magnitude) * (p.position - p.contactSpring.attachPoint) / (p.position - p.contactSpring.attachPoint).magnitude;
-            p.currentForces += springForce;
+            if (p.attachedToContact)
+            {
+                //spring force
+                var springForce = -p.contactSpring.ks * Vector3.Dot(p.position - p.contactSpring.attachPoint, plane.normal) * plane.normal;
+                // damper
+                springForce += -p.contactSpring.kd * p.velocity;
+                p.currentForces += springForce;
+            }
         }
 
         //spring
@@ -235,7 +241,7 @@ public class BParticleSimMesh : MonoBehaviour
         {
             var otherP = particles[spring.attachedParticle];
 
-            if (spring.restLength == 0.0) continue; // this was causing issues
+            if ((p.position - otherP.position).magnitude == 0.0f) continue; // this was causing issues
 
             //spring force
             var springForce = spring.ks * (spring.restLength - (p.position - otherP.position).magnitude) * (p.position - otherP.position) / (p.position - otherP.position).magnitude;
